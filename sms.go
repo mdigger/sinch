@@ -142,7 +142,7 @@ func (s *SMS) sign(req *http.Request) error {
 
 type sinchSMS struct {
 	From    string `json:",omitempty"`
-	Message string `json:"message"`
+	Message string
 }
 
 type sinchResponse struct {
