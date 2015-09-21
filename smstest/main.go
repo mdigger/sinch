@@ -19,8 +19,8 @@ var (
 
 func init() {
 	flag.StringVar(&addr, "http", ":8080", "HTTP server address & port")
-	flag.StringVar(&key, "key", "83d21b0b-605a-4381-b52d-2c27f21317e1", "Sinch Key")
-	flag.StringVar(&secret, "secret", "4YiDmX0WZkedmJQWF7MHsQ==", "Sinch Secret")
+	flag.StringVar(&key, "key", "8efa3870-ec30-4a55-b612-0a9065d4e5f7", "Sinch Key")
+	flag.StringVar(&secret, "secret", "Ai9PHJVc/UKHpPgiqaZgOA==", "Sinch Secret")
 	flag.StringVar(&from, "from", "+14152364961", "From phone number")
 	flag.Parse()
 	sms = &sinch.SMS{
@@ -39,14 +39,18 @@ func main() {
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
+	log.Println("index:", r.Method, r.URL)
 	if r.URL.Path == "/" {
+		log.Println("redirect to /send")
 		http.Redirect(w, r, "/send", http.StatusMovedPermanently)
 		return
 	}
+	log.Println("not found")
 	http.NotFound(w, r)
 }
 
 func send(w http.ResponseWriter, r *http.Request) {
+	log.Println("send:", r.Method, r.URL)
 	if r.Method != "POST" {
 		io.WriteString(w, `<!DOCTYPE html>
 <meta charset="utf-8">
@@ -71,6 +75,7 @@ func send(w http.ResponseWriter, r *http.Request) {
 }
 
 func status(w http.ResponseWriter, r *http.Request) {
+	log.Println("status:", r.Method, r.URL)
 	msgID, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/send/"))
 	if err != nil {
 		log.Println("Bad message ID:", err)

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -170,28 +171,34 @@ func (e sinchError) Error() string {
 // a post request to a specified URL. URLs for callbacks need to be configured in the Sinch portal
 // when creating or configuring an application.
 func (s *SMS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	log.Println("incomming SMS:", req.Method, req.URL)
 	if req.Method != "POST" {
 		w.Header().Set("Allowed", "POST")
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		log.Println("Method not allowed")
 		return
 	}
 	if req.Header.Get("Content-Type") != "application/json" {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		log.Println("Bad content type:", req.Header.Get("Content-Type"))
 		return
 	}
 	var sms = new(IncomingSMS)
 	if err := json.NewDecoder(req.Body).Decode(sms); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Println("Error JSON decode:", err)
 		return
 	}
 	req.Body.Close()
 	if sms.Event != "incomingSms" {
 		http.Error(w, "Not 'incomingSms' event type", http.StatusBadRequest)
+		log.Println("Not 'incomingSms' event:", sms.Event)
 		return
 	}
 	if s.OnMessage != nil {
 		s.OnMessage(*sms)
 	}
+	log.Println("'incomingSms' OK")
 	w.WriteHeader(http.StatusNoContent)
 }
 

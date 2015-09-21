@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSMSSend(t *testing.T) {
@@ -76,7 +78,7 @@ func TestAuthorization(t *testing.T) {
 		t.Fatal(err)
 	}
 	// println(req.Header.Get("Authorization"))
-	// req.Write(os.Stdout)
+	req.Write(os.Stdout)
 	if req.Header.Get("Authorization") != "Application 5F5C418A0F914BBC8234A9BF5EDDAD97:qDXMwzfaxCRS849c/2R0hg0nphgdHciTo7OdM6MsdnM=" {
 		t.Fatal("Bad authorization")
 	}
@@ -111,4 +113,42 @@ func TestIncoming(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Printf("Response: %#v", response)
+}
+
+func TestAuthorization2(t *testing.T) {
+	sms := &SMS{
+		Key:    "83d21b0b-605a-4381-b52d-2c27f21317e1",
+		Secret: "4YiDmX0WZkedmJQWF7MHsQ==",
+	}
+	// кодируем SMS в формат JSON
+	data, err := json.Marshal(sinchSMS{
+		From:    "+14152364961",
+		Message: "Test message!",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// формируем запрос
+	req, err := http.NewRequest("POST", sinchURL+"+79031744445", bytes.NewReader(data))
+	if err != nil {
+		return
+	}
+	UserAgent = "MXSMS/0.3.4"
+	if UserAgent != "" {
+		req.Header.Set("User-Agent", UserAgent)
+	}
+	req.Header.Set("X-Timestamp", time.Now().UTC().Format(time.RFC3339))
+	req.Header.Set("Accept", "application/json")
+	if req.Method == "POST" || req.Method == "PUT" || req.Method == "PATCH" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	if err := sms.sign(req); err != nil {
+		t.Fatal(err)
+	}
+	// println(req.Header.Get("Authorization"))
+	req.Write(os.Stdout)
+	// if req.Header.Get("Authorization") != "Application 5F5C418A0F914BBC8234A9BF5EDDAD97:qDXMwzfaxCRS849c/2R0hg0nphgdHciTo7OdM6MsdnM=" {
+	// 	t.Fatal("Bad authorization")
+	// }
 }
