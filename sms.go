@@ -131,6 +131,7 @@ func (s *SMS) sign(req *http.Request) (signature string, err error) {
 			log.Println("body read error:", err)
 			return
 		}
+		req.Body.Close()
 		req.Body = ioutil.NopCloser(bytes.NewReader(data))
 		h := md5.New()
 		if _, err = h.Write(data); err != nil {
@@ -250,8 +251,8 @@ func (s *SMS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
-	auth := fmt.Sprintf("Application %s:%s", s.Key, signature)
-	if req.Header.Get("Authorization") != auth {
+	auth := fmt.Sprintf("%s:%s", s.Key, signature)
+	if !strings.HasSuffix(req.Header.Get("Authorization"), auth) {
 		http.Error(w, "Bad signature", http.StatusBadRequest)
 		log.Println("Bad signature:", auth, "vs", req.Header.Get("Authorization"))
 		return
