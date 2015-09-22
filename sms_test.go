@@ -74,9 +74,11 @@ func TestAuthorization(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	if err := sms.sign(req); err != nil {
+	signature, err := sms.sign(req)
+	if err != nil {
 		t.Fatal(err)
 	}
+	fmt.Println("Signature:", signature)
 	// println(req.Header.Get("Authorization"))
 	req.Write(os.Stdout)
 	if req.Header.Get("Authorization") != "Application 5F5C418A0F914BBC8234A9BF5EDDAD97:qDXMwzfaxCRS849c/2R0hg0nphgdHciTo7OdM6MsdnM=" {
@@ -86,8 +88,8 @@ func TestAuthorization(t *testing.T) {
 
 func TestIncoming(t *testing.T) {
 	sms := &SMS{
-		Key:    "83d21b0b-605a-4381-b52d-2c27f21317e1",
-		Secret: "4YiDmX0WZkedmJQWF7MHsQ==",
+		Key:    "8efa3870-ec30-4a55-b612-0a9065d4e5f7",
+		Secret: "Ai9PHJVc/UKHpPgiqaZgOA==",
 	}
 	data := `{
     "event": "incomingSms",
@@ -143,10 +145,12 @@ func TestAuthorization2(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	if err := sms.sign(req); err != nil {
+	signature, err := sms.sign(req)
+	if err != nil {
 		t.Fatal(err)
 	}
 	// println(req.Header.Get("Authorization"))
+	fmt.Println("Signature:", signature)
 	req.Write(os.Stdout)
 	// if req.Header.Get("Authorization") != "Application 5F5C418A0F914BBC8234A9BF5EDDAD97:qDXMwzfaxCRS849c/2R0hg0nphgdHciTo7OdM6MsdnM=" {
 	// 	t.Fatal("Bad authorization")

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"expvar"
 	"flag"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mdigger/sinch"
 )
@@ -18,6 +20,7 @@ var (
 )
 
 func init() {
+	expvar.Publish("started", time.Now())
 	flag.StringVar(&addr, "http", ":8080", "HTTP server address & port")
 	flag.StringVar(&key, "key", "8efa3870-ec30-4a55-b612-0a9065d4e5f7", "Sinch Key")
 	flag.StringVar(&secret, "secret", "Ai9PHJVc/UKHpPgiqaZgOA==", "Sinch Secret")
@@ -35,6 +38,7 @@ func init() {
 }
 
 func main() {
+	log.Println("Starting", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 

@@ -7,15 +7,20 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"expvar"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// счетчик отправленных SMS
+var counts = expvar.NewMap("SMS")
 
 // SMS Messaging API URL
 const sinchURL = "https://messagingapi.sinch.com/v1/sms/"
@@ -49,6 +54,7 @@ func (s *SMS) Send(from, to, msg string) (msgID int, err error) {
 		return
 	}
 	log.Println("SMS data:", string(data))
+	counts.Add("send", 1)
 	req, err := http.NewRequest("POST", sinchURL+to, bytes.NewReader(data))
 	if err != nil {
 		return
@@ -89,40 +95,54 @@ func (s *SMS) request(req *http.Request, response interface{}) error {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	// req.SetBasicAuth("application\\"+s.Key, s.Secret) // simple authorization method
-	if err := s.sign(req); err != nil {
+	signature, err := s.sign(req)
+	if err != nil {
+		log.Println("Bad signature:", err)
 		return err
 	}
+	req.Header.Set("Authorization", fmt.Sprintf("Application %s:%s", s.Key, signature))
 	resp, err := s.client.Do(req)
 	if err != nil {
+		log.Println("Bad response:", err)
 		return err
 	}
+	resp.Write(os.Stdout)
+	return nil
+
 	if resp.StatusCode == 200 {
+		log.Println("Decode JSON")
 		return json.NewDecoder(resp.Body).Decode(response)
 	}
 	var errResponse = new(sinchError)
 	if err = json.NewDecoder(resp.Body).Decode(errResponse); err != nil {
+		log.Println("JSON response error:", err)
 		return err
 	}
+	log.Println("response error:", errResponse)
 	return errResponse
 }
 
-func (s *SMS) sign(req *http.Request) error {
+func (s *SMS) sign(req *http.Request) (signature string, err error) {
 	var body string
 	if req.Body != nil {
-		data, err := ioutil.ReadAll(req.Body)
+		var data []byte
+		data, err = ioutil.ReadAll(req.Body)
 		if err != nil {
-			return err
+			log.Println("body read error:", err)
+			return
 		}
 		req.Body = ioutil.NopCloser(bytes.NewReader(data))
 		h := md5.New()
-		if _, err := h.Write(data); err != nil {
-			return err
+		if _, err = h.Write(data); err != nil {
+			log.Println("hash error:", err)
+			return
 		}
 		body = base64.StdEncoding.EncodeToString(h.Sum(nil))
 	}
 	secret, err := base64.StdEncoding.DecodeString(s.Secret)
 	if err != nil {
-		return err
+		log.Println("secret decode error:", err)
+		return
 	}
 	sign := strings.Join([]string{
 		req.Method,
@@ -133,13 +153,13 @@ func (s *SMS) sign(req *http.Request) error {
 	}, "\n")
 	// log.Print("Sign:\n", sign)
 	mac := hmac.New(sha256.New, secret)
-	if _, err := io.WriteString(mac, sign); err != nil {
-		return err
+	if _, err = io.WriteString(mac, sign); err != nil {
+		log.Println("sha356 decode error:", err)
+		return
 	}
-	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	signature = base64.StdEncoding.EncodeToString(mac.Sum(nil))
 	// log.Println("Signature:", signature)
-	req.Header.Set("Authorization", fmt.Sprintf("Application %s:%s", s.Key, signature))
-	return nil
+	return
 }
 
 type sinchSMS struct {
@@ -172,34 +192,73 @@ func (e sinchError) Error() string {
 // a post request to a specified URL. URLs for callbacks need to be configured in the Sinch portal
 // when creating or configuring an application.
 func (s *SMS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	log.Println("incomming SMS:", req.Method, req.URL)
+	log.Println("incoming SMS:", req.Method, req.URL)
 	if req.Method != "POST" {
 		w.Header().Set("Allowed", "POST")
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		log.Println("Method not allowed")
 		return
 	}
-	if strings.HasPrefix(req.Header.Get("Content-Type"), "application/json") {
+	counts.Add("received", 1)
+	if !strings.HasPrefix(req.Header.Get("Content-Type"), "application/json") {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		log.Println("Bad content type:", req.Header.Get("Content-Type"))
 		return
 	}
+	data, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Println("Error reading body:", err)
+		return
+	}
+	req.Body.Close()
 	var sms = new(IncomingSMS)
-	if err := json.NewDecoder(req.Body).Decode(sms); err != nil {
+	if err := json.Unmarshal(data, sms); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		log.Println("Error JSON decode:", err)
 		return
 	}
-	req.Body.Close()
 	if sms.Event != "incomingSms" {
 		http.Error(w, "Not 'incomingSms' event type", http.StatusBadRequest)
 		log.Println("Not 'incomingSms' event:", sms.Event)
 		return
 	}
+	h := md5.New()
+	if _, err = h.Write(data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println("hash error:", err)
+		return
+	}
+	secret, err := base64.StdEncoding.DecodeString(s.Secret)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println("secret decode error:", err)
+		return
+	}
+	sign := strings.Join([]string{
+		req.Method,
+		base64.StdEncoding.EncodeToString(h.Sum(nil)),
+		req.Header.Get("Content-Type"),
+		"x-timestamp:" + req.Header.Get("X-Timestamp"),
+		req.URL.Path,
+	}, "\n")
+	// log.Print("Sign:\n", sign)
+	mac := hmac.New(sha256.New, secret)
+	if _, err := io.WriteString(mac, sign); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println("sha356 decode error:", err)
+		return
+	}
+	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	auth := fmt.Sprintf("Application %s:%s", s.Key, signature)
+	if req.Header.Get("Authorization") != auth {
+		http.Error(w, "Bad signature", http.StatusBadRequest)
+		log.Println("Bad signature:", auth, "vs", req.Header.Get("Authorization"))
+		return
+	}
 	if s.OnMessage != nil {
 		s.OnMessage(*sms)
 	}
-	log.Println("'incomingSms' OK")
 	w.WriteHeader(http.StatusNoContent)
 }
 
