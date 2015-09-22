@@ -48,6 +48,7 @@ func (s *SMS) Send(from, to, msg string) (msgID int, err error) {
 	if err != nil {
 		return
 	}
+	log.Println("SMS data:", string(data))
 	req, err := http.NewRequest("POST", sinchURL+to, bytes.NewReader(data))
 	if err != nil {
 		return
@@ -178,7 +179,7 @@ func (s *SMS) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		log.Println("Method not allowed")
 		return
 	}
-	if req.Header.Get("Content-Type") != "application/json" {
+	if strings.HasPrefix(req.Header.Get("Content-Type"), "application/json") {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		log.Println("Bad content type:", req.Header.Get("Content-Type"))
 		return
